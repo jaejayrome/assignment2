@@ -96,25 +96,14 @@ static int dirent_compare(const void *a, const void *b)
   return strcmp(e1->d_name, e2->d_name);
 }
 
-
 /// @brief recursively process directory @a dn and print its tree
 ///
 /// @param dn absolute or relative path string
 /// @param pstr prefix string printed in front of each entry
 /// @param stats pointer to statistics
 /// @param flags output control flags (F_*)
-#include <dirent.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-#define MAX_DEPTH 10
-
-/*
-  @param dn: this would be the name of the current directory
-  @param pstr: this would the prefix string thus far
-*/
-void processDir(const char *dn, const char *pstr, struct summary *stats, unsigned int flags)
+/// @param level determines the identation level during printing
+void processDir(const char *dn, const char *pstr, struct summary *stats, unsigned int flags, unsigned int level)
 {
   DIR *dir;
   struct dirent *dp;
@@ -170,11 +159,29 @@ void processDir(const char *dn, const char *pstr, struct summary *stats, unsigne
   // ensures that there is at least one file inside
   qsort((void *)files, count, sizeof(struct dirent *), dirent_compare);
 
+  // generate the prefix, 2 spaces for each level
+  int prefixSize = ((level * 2) + 1) * sizeof(char);
+  char *prefix = (char *)malloc(prefixSize);
+  for (int i = 0; i < level * 2; i += 2)
+  {
+    prefix[i] = ' ';
+    prefix[i + 1] = ' ';
+  }
+
   // traverse through each file that is inside the new array
   for (int i = 0; i < count; i++)
   {
     struct dirent *dp = files[i];
-    printf("%s\n", dp->d_name);
+
+    // concatenate two strings
+    size_t combinedSize = prefixSize + sizeof(dp->d_name) + 1;
+    char *combinedPrefix = (char *)malloc(combinedSize);
+    strcpy(combinedPrefix, prefix);
+    strcat(combinedPrefix, dp->d_name);
+
+    printf("%s\n", combinedPrefix);
+
+    free(combinedPrefix);
 
     // update the directory statistics
     switch (dp->d_type)
@@ -199,7 +206,7 @@ void processDir(const char *dn, const char *pstr, struct summary *stats, unsigne
     // recursive step [DFS]: if have nested directory, explore it
     if (dp->d_type == DT_DIR && strcmp(dp->d_name, "..") != 0 && strcmp(dp->d_name, ".") != 0)
     {
-      processDir(dp->d_name, newPath, stats, flags);
+      processDir(dp->d_name, newPath, stats, flags, level + 1);
     }
   }
 
@@ -326,7 +333,7 @@ int main(int argc, char *argv[])
     parentPath = parentPath == NULL ? "./" : parentPath;
 
     // first recursive call
-    processDir(lastComponent, parentPath, &dstat, flags);
+    processDir(lastComponent, parentPath, &dstat, flags, 1);
 
     // increment the total stats based on the directory stats
     tstat.files += dstat.files;
