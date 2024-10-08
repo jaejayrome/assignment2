@@ -83,21 +83,19 @@ struct dirent *getNext(DIR *dir)
 /// @retval 1  if a>b
 static int dirent_compare(const void *a, const void *b)
 {
-  struct dirent *e1 = (struct dirent *)a;
-  struct dirent *e2 = (struct dirent *)b;
+  const struct dirent *e1 = *(const struct dirent **)a;
+  const struct dirent *e2 = *(const struct dirent **)b;
 
   // if one of the entries is a directory, it comes first
-  if (e1->d_type != e2->d_type)
-  {
-    if (e1->d_type == DT_DIR)
-      return -1;
-    if (e2->d_type == DT_DIR)
-      return 1;
-  }
+  if (e1->d_type == DT_DIR && e2->d_type != DT_DIR)
+    return -1;
+  if (e1->d_type != DT_DIR && e2->d_type == DT_DIR)
+    return 1;
 
   // otherwise sorty by name
   return strcmp(e1->d_name, e2->d_name);
 }
+
 
 /// @brief recursively process directory @a dn and print its tree
 ///
@@ -148,17 +146,31 @@ void processDir(const char *dn, const char *pstr, struct summary *stats, unsigne
 
   while ((dp = readdir(dir)) != NULL)
   {
-    // ensure that we don't include parent and child directories
     if (strcmp(dp->d_name, ".") == 0 || strcmp(dp->d_name, "..") == 0)
     {
       continue;
     }
-    // reallocate extra space to contain another entry
     files = realloc(files, sizeof(struct dirent *) * (count + 1));
-    files[count++] = dp;
+    files[count] = malloc(sizeof(struct dirent));
+    memcpy(files[count], dp, sizeof(struct dirent));
+    count++;
   }
 
-  qsort(files, count, sizeof(struct dirent *), (int (*)(const void *, const void *))dirent_compare);
+  // base case: returning if the directory happens to be empty
+  if (count == 0)
+  {
+    free(files);
+    closedir(dir);
+    return;
+  }
+
+  // Sort the entries correctly
+  qsort(files, count, sizeof(struct dirent *), dirent_compare);
+
+  // ensures that there is at least one file inside
+  qsort((void *)files, count, sizeof(struct dirent *), dirent_compare);
+
+  // traverse through each file that is inside the new array
   for (int i = 0; i < count; i++)
   {
     struct dirent *dp = files[i];
